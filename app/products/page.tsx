@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { productsApi, categoriesApi } from "@/lib/api"
+import { useApi, useMutation } from "@/hooks/use-api"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -70,69 +72,24 @@ interface Product {
   name: string
   description: string
   price: number
-  category: string
+  category: {
+    id: string
+    name: string
+  }
   stock: number
   barcode: string
+  sku: string
   lowStockThreshold: number
+  isActive: boolean
 }
 
-const mockProducts: Product[] = [
-  {
-    id: "1",
-    name: "Wireless Headphones",
-    description: "High-quality wireless headphones with noise cancellation",
-    price: 99.99,
-    category: "Electronics",
-    stock: 25,
-    barcode: "123456789",
-    lowStockThreshold: 10,
-  },
-  {
-    id: "2",
-    name: "Smartphone Case",
-    description: "Protective case for smartphones",
-    price: 24.99,
-    category: "Accessories",
-    stock: 50,
-    barcode: "987654321",
-    lowStockThreshold: 20,
-  },
-  {
-    id: "3",
-    name: "USB Cable",
-    description: "High-speed USB charging cable",
-    price: 12.99,
-    category: "Electronics",
-    stock: 5,
-    barcode: "456789123",
-    lowStockThreshold: 15,
-  },
-  {
-    id: "4",
-    name: "Power Bank",
-    description: "Portable power bank with fast charging",
-    price: 39.99,
-    category: "Electronics",
-    stock: 30,
-    barcode: "789123456",
-    lowStockThreshold: 10,
-  },
-  {
-    id: "5",
-    name: "Bluetooth Speaker",
-    description: "Portable Bluetooth speaker with premium sound",
-    price: 79.99,
-    category: "Electronics",
-    stock: 8,
-    barcode: "321654987",
-    lowStockThreshold: 10,
-  },
-]
+interface Category {
+  id: string
+  name: string
+}
 
-const categories = ["Electronics", "Accessories", "Clothing", "Home & Garden", "Sports", "Books"]
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>(mockProducts)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -146,82 +103,118 @@ export default function ProductsPage() {
     name: "",
     description: "",
     price: "",
-    category: "",
+    categoryId: "",
     stock: "",
     barcode: "",
+    sku: "",
     lowStockThreshold: "",
   })
 
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) || product.barcode.includes(searchTerm)
-    const matchesCategory = selectedCategory === "all" || product.category === selectedCategory
-    return matchesSearch && matchesCategory
+  // Fetch products with search and pagination
+  const { data: productsData, loading: productsLoading, error: productsError, refetch: refetchProducts } = useApi(
+    () => productsApi.getAll({
+      page: currentPage,
+      limit: itemsPerPage,
+      search: searchTerm || undefined,
+      categoryId: selectedCategory !== "all" ? selectedCategory : undefined
+    }),
+    [currentPage, searchTerm, selectedCategory]
+  )
+
+  // Fetch categories
+  const { data: categories, loading: categoriesLoading } = useApi(() => categoriesApi.getAll(), [])
+
+  // Mutations
+  const createProductMutation = useMutation(productsApi.create, {
+    onSuccess: () => {
+      refetchProducts()
+      setIsAddDialogOpen(false)
+      resetForm()
+    }
   })
 
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
-  const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+  const updateProductMutation = useMutation(
+    ({ id, data }: { id: string; data: any }) => productsApi.update(id, data),
+    {
+      onSuccess: () => {
+        refetchProducts()
+        setIsEditDialogOpen(false)
+        resetForm()
+        setSelectedProduct(null)
+      }
+    }
+  )
 
-  const lowStockProducts = products.filter((product) => product.stock <= product.lowStockThreshold)
+  const deleteProductMutation = useMutation(productsApi.delete, {
+    onSuccess: () => {
+      refetchProducts()
+      setIsDeleteDialogOpen(false)
+      setSelectedProduct(null)
+    }
+  })
+
+  const products = productsData?.products || []
+  const pagination = productsData?.pagination
+  const lowStockProducts = products.filter((product: Product) => product.stock <= product.lowStockThreshold)
 
   const resetForm = () => {
     setFormData({
       name: "",
       description: "",
       price: "",
-      category: "",
+      categoryId: "",
       stock: "",
       barcode: "",
+      sku: "",
       lowStockThreshold: "",
     })
   }
 
-  const handleAdd = () => {
-    const newProduct: Product = {
-      id: Date.now().toString(),
+  const handleAdd = async () => {
+    const productData = {
       name: formData.name,
       description: formData.description,
       price: Number.parseFloat(formData.price),
-      category: formData.category,
+      categoryId: formData.categoryId,
       stock: Number.parseInt(formData.stock),
-      barcode: formData.barcode,
+      barcode: formData.barcode || undefined,
+      sku: formData.sku || undefined,
       lowStockThreshold: Number.parseInt(formData.lowStockThreshold),
     }
-    setProducts([...products, newProduct])
-    setIsAddDialogOpen(false)
-    resetForm()
+
+    await createProductMutation.mutate(productData)
   }
 
   const handleEdit = (product: Product) => {
     setSelectedProduct(product)
     setFormData({
       name: product.name,
-      description: product.description,
+      description: product.description || "",
       price: product.price.toString(),
-      category: product.category,
+      categoryId: product.category.id,
       stock: product.stock.toString(),
-      barcode: product.barcode,
+      barcode: product.barcode || "",
+      sku: product.sku || "",
       lowStockThreshold: product.lowStockThreshold.toString(),
     })
     setIsEditDialogOpen(true)
   }
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     if (!selectedProduct) return
-    const updatedProduct: Product = {
-      ...selectedProduct,
+
+    const productData = {
       name: formData.name,
       description: formData.description,
       price: Number.parseFloat(formData.price),
-      category: formData.category,
+      categoryId: formData.categoryId,
       stock: Number.parseInt(formData.stock),
-      barcode: formData.barcode,
+      barcode: formData.barcode || undefined,
+      sku: formData.sku || undefined,
       lowStockThreshold: Number.parseInt(formData.lowStockThreshold),
     }
-    setProducts(products.map((p) => (p.id === selectedProduct.id ? updatedProduct : p)))
-    setIsEditDialogOpen(false)
-    resetForm()
-    setSelectedProduct(null)
+
+    await updateProductMutation.mutate({ id: selectedProduct.id, data: productData })
   }
 
   const handleDelete = (product: Product) => {
@@ -229,11 +222,9 @@ export default function ProductsPage() {
     setIsDeleteDialogOpen(true)
   }
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!selectedProduct) return
-    setProducts(products.filter((p) => p.id !== selectedProduct.id))
-    setIsDeleteDialogOpen(false)
-    setSelectedProduct(null)
+    await deleteProductMutation.mutate(selectedProduct.id)
   }
 
   const ProductForm = ({ isEdit = false }: { isEdit?: boolean }) => (
@@ -274,17 +265,17 @@ export default function ProductsPage() {
         />
       </div>
       <div className="grid grid-cols-4 items-center gap-4">
-        <Label htmlFor="category" className="text-right">
+        <Label htmlFor="categoryId" className="text-right">
           Category
         </Label>
-        <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
+        <Select value={formData.categoryId} onValueChange={(value) => setFormData({ ...formData, categoryId: value })}>
           <SelectTrigger className="col-span-3 bg-input border-border">
             <SelectValue placeholder="Select category" />
           </SelectTrigger>
           <SelectContent>
-            {categories.map((category) => (
-              <SelectItem key={category} value={category}>
-                {category}
+            {categories?.map((category: Category) => (
+              <SelectItem key={category.id} value={category.id}>
+                {category.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -314,6 +305,17 @@ export default function ProductsPage() {
         />
       </div>
       <div className="grid grid-cols-4 items-center gap-4">
+        <Label htmlFor="sku" className="text-right">
+          SKU
+        </Label>
+        <Input
+          id="sku"
+          value={formData.sku}
+          onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+          className="col-span-3 bg-input border-border"
+        />
+      </div>
+      <div className="grid grid-cols-4 items-center gap-4">
         <Label htmlFor="lowStockThreshold" className="text-right">
           Low Stock Alert
         </Label>
@@ -327,6 +329,38 @@ export default function ProductsPage() {
       </div>
     </div>
   )
+
+  if (productsLoading && currentPage === 1) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <div className="flex-1">
+          <Header />
+          <main className="p-6">
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold text-foreground">Products</h1>
+              <p className="text-muted-foreground">Loading products...</p>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
+  if (productsError) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <div className="flex-1">
+          <Header />
+          <main className="p-6">
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold text-foreground">Products</h1>
+              <p className="text-destructive">Error: {productsError}</p>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -365,7 +399,7 @@ export default function ProductsPage() {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <CardTitle className="text-card-foreground">Product Inventory</CardTitle>
-                  <CardDescription>{products.length} total products</CardDescription>
+                  <CardDescription>{pagination?.total || 0} total products</CardDescription>
                 </div>
                 <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                   <DialogTrigger asChild>
@@ -383,8 +417,8 @@ export default function ProductsPage() {
                     </DialogHeader>
                     <ProductForm />
                     <DialogFooter>
-                      <Button type="submit" onClick={handleAdd}>
-                        Add Product
+                      <Button type="submit" onClick={handleAdd} disabled={createProductMutation.loading}>
+                        {createProductMutation.loading ? "Adding..." : "Add Product"}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -409,9 +443,9 @@ export default function ProductsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Categories</SelectItem>
-                    {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
+                    {categories?.map((category: Category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -432,7 +466,7 @@ export default function ProductsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedProducts.map((product) => (
+                    {products.map((product: Product) => (
                       <TableRow key={product.id}>
                         <TableCell>
                           <div>
@@ -441,9 +475,9 @@ export default function ProductsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">{product.category}</Badge>
+                          <Badge variant="outline">{product.category.name}</Badge>
                         </TableCell>
-                        <TableCell className="font-medium">${product.price}</TableCell>
+                        <TableCell className="font-medium">${product.price.toFixed(2)}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <span className={product.stock <= product.lowStockThreshold ? "text-destructive" : ""}>
@@ -454,10 +488,15 @@ export default function ProductsPage() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="font-mono text-sm">{product.barcode}</TableCell>
+                        <TableCell className="font-mono text-sm">{product.barcode || 'N/A'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => handleEdit(product)}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(product)}
+                              disabled={updateProductMutation.loading}
+                            >
                               <Edit className="h-4 w-4" />
                             </Button>
                             <Button
@@ -465,6 +504,7 @@ export default function ProductsPage() {
                               size="sm"
                               onClick={() => handleDelete(product)}
                               className="text-destructive hover:text-destructive"
+                              disabled={deleteProductMutation.loading}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -477,11 +517,11 @@ export default function ProductsPage() {
               </div>
 
               {/* Pagination */}
-              {totalPages > 1 && (
+              {pagination && pagination.pages > 1 && (
                 <div className="flex items-center justify-between mt-4">
                   <p className="text-sm text-muted-foreground">
-                    Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-                    {Math.min(currentPage * itemsPerPage, filteredProducts.length)} of {filteredProducts.length}{" "}
+                    Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
+                    {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}{" "}
                     products
                   </p>
                   <div className="flex gap-2">
@@ -489,7 +529,7 @@ export default function ProductsPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => setCurrentPage(currentPage - 1)}
-                      disabled={currentPage === 1}
+                      disabled={currentPage === 1 || productsLoading}
                     >
                       Previous
                     </Button>
@@ -497,7 +537,7 @@ export default function ProductsPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => setCurrentPage(currentPage + 1)}
-                      disabled={currentPage === totalPages}
+                      disabled={currentPage === pagination.pages || productsLoading}
                     >
                       Next
                     </Button>
@@ -516,8 +556,8 @@ export default function ProductsPage() {
               </DialogHeader>
               <ProductForm isEdit />
               <DialogFooter>
-                <Button type="submit" onClick={handleUpdate}>
-                  Save Changes
+                <Button type="submit" onClick={handleUpdate} disabled={updateProductMutation.loading}>
+                  {updateProductMutation.loading ? "Saving..." : "Save Changes"}
                 </Button>
               </DialogFooter>
             </DialogContent>
