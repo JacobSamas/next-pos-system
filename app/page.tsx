@@ -32,6 +32,11 @@ const TrendingUpIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
+export const metadata = {
+  title: "Dashboard",
+  description: "Monitor your retail business performance with real-time sales analytics, inventory tracking, and comprehensive business insights.",
+}
+
 export default function Dashboard() {
   const stats = [
     {
