@@ -11,12 +11,12 @@ export async function GET() {
     const lastMonth = new Date()
     lastMonth.setMonth(lastMonth.getMonth() - 1)
 
-    // Get low stock products first
-    const lowStockProducts = await prisma.$queryRaw<Array<{count: bigint}>>`
+    // Get low stock products count using raw query
+    const lowStockResult = await prisma.$queryRaw<Array<{count: bigint}>>`
       SELECT COUNT(*) as count FROM Product
-      WHERE isActive = true AND stock <= lowStockThreshold
+      WHERE isActive = 1 AND stock <= lowStockThreshold
     `
-    const lowStockCount = Number(lowStockProducts[0]?.count || 0)
+    const lowStockCount = Number(lowStockResult[0]?.count || 0)
 
     const [
       totalSales,

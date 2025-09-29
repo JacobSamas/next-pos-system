@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { productsApi, ordersApi } from "@/lib/api"
+import { useApi, useMutation } from "@/hooks/use-api"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -70,7 +72,10 @@ interface Product {
   id: string
   name: string
   price: number
-  category: string
+  category: {
+    id: string
+    name: string
+  }
   stock: number
   barcode: string
 }
@@ -80,14 +85,6 @@ interface CartItem extends Product {
   discount: number
 }
 
-const mockProducts: Product[] = [
-  { id: "1", name: "Wireless Headphones", price: 99.99, category: "Electronics", stock: 25, barcode: "123456789" },
-  { id: "2", name: "Smartphone Case", price: 24.99, category: "Accessories", stock: 50, barcode: "987654321" },
-  { id: "3", name: "USB Cable", price: 12.99, category: "Electronics", stock: 100, barcode: "456789123" },
-  { id: "4", name: "Power Bank", price: 39.99, category: "Electronics", stock: 30, barcode: "789123456" },
-  { id: "5", name: "Bluetooth Speaker", price: 79.99, category: "Electronics", stock: 15, barcode: "321654987" },
-  { id: "6", name: "Phone Stand", price: 19.99, category: "Accessories", stock: 40, barcode: "654987321" },
-]
 
 export default function BillingPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -95,9 +92,14 @@ export default function BillingPage() {
   const [paymentMethod, setPaymentMethod] = useState<string>("")
   const [showInvoice, setShowInvoice] = useState(false)
 
-  const filteredProducts = mockProducts.filter(
-    (product) => product.name.toLowerCase().includes(searchTerm.toLowerCase()) || product.barcode.includes(searchTerm),
+  // Fetch products with search
+  const { data: productsData, loading: productsLoading, error: productsError } = useApi(
+    () => productsApi.getAll({ search: searchTerm || undefined, limit: 50 }),
+    [searchTerm]
   )
+
+  const products = productsData?.products || []
+  const filteredProducts = products
 
   const addToCart = (product: Product) => {
     const existingItem = cart.find((item) => item.id === product.id)
@@ -138,9 +140,28 @@ export default function BillingPage() {
     setPaymentMethod("")
   }
 
-  const processPayment = () => {
+  // Create order mutation
+  const createOrderMutation = useMutation(ordersApi.create, {
+    onSuccess: () => {
+      setShowInvoice(true)
+    }
+  })
+
+  const processPayment = async () => {
     if (cart.length === 0 || !paymentMethod) return
-    setShowInvoice(true)
+
+    const orderData = {
+      items: cart.map(item => ({
+        productId: item.id,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        discount: item.discount
+      })),
+      paymentMethod: paymentMethod.toUpperCase(),
+      discount: 0 // Could add overall order discount if needed
+    }
+
+    await createOrderMutation.mutate(orderData)
   }
 
   return (
@@ -171,6 +192,11 @@ export default function BillingPage() {
                   />
                 </div>
 
+                {productsLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading products...</div>
+                ) : productsError ? (
+                  <div className="text-center py-8 text-destructive">Error: {productsError}</div>
+                ) : (
                 <ScrollArea className="h-96">
                   <div className="grid gap-3 md:grid-cols-2">
                     {filteredProducts.map((product) => (
@@ -183,7 +209,7 @@ export default function BillingPage() {
                           <div className="flex justify-between items-start mb-2">
                             <h3 className="font-medium text-secondary-foreground">{product.name}</h3>
                             <Badge variant="outline" className="text-xs">
-                              {product.category}
+                              {product.category.name}
                             </Badge>
                           </div>
                           <div className="flex justify-between items-center">
@@ -196,6 +222,7 @@ export default function BillingPage() {
                     ))}
                   </div>
                 </ScrollArea>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -320,8 +347,8 @@ export default function BillingPage() {
                   </Select>
 
                   <div className="flex gap-2">
-                    <Button onClick={processPayment} disabled={cart.length === 0 || !paymentMethod} className="flex-1">
-                      Process Payment
+                    <Button onClick={processPayment} disabled={cart.length === 0 || !paymentMethod || createOrderMutation.loading} className="flex-1">
+                      {createOrderMutation.loading ? "Processing..." : "Process Payment"}
                     </Button>
                     <Button variant="outline" onClick={clearCart} disabled={cart.length === 0}>
                       Clear
