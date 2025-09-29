@@ -1,5 +1,9 @@
+"use client"
+
+import { useState, useEffect } from "react"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { dashboardApi } from "@/lib/api"
 
 const DollarSignIcon = ({ className }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -32,38 +36,82 @@ const TrendingUpIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
-export const metadata = {
-  title: "Dashboard",
-  description: "Monitor your retail business performance with real-time sales analytics, inventory tracking, and comprehensive business insights.",
-}
 
 export default function Dashboard() {
+  const [dashboardData, setDashboardData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchDashboardData() {
+      try {
+        setLoading(true)
+        const data = await dashboardApi.getStats()
+        setDashboardData(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDashboardData()
+  }, [])
+
+  if (loading) {
+    return (
+      <>
+        <Header />
+        <main className="p-6">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </main>
+      </>
+    )
+  }
+
+  if (error) {
+    return (
+      <>
+        <Header />
+        <main className="p-6">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+            <p className="text-destructive">Error: {error}</p>
+          </div>
+        </main>
+      </>
+    )
+  }
+
   const stats = [
     {
       title: "Total Sales",
-      value: "$12,345",
-      description: "+20.1% from last month",
+      value: `$${dashboardData?.totalSales?.toLocaleString() || '0'}`,
+      description: `${dashboardData?.salesGrowth >= 0 ? '+' : ''}${dashboardData?.salesGrowth || 0}% from last month`,
       icon: DollarSignIcon,
-      trend: "up",
+      trend: dashboardData?.salesGrowth >= 0 ? "up" : "down",
     },
     {
       title: "Orders Today",
-      value: "45",
-      description: "+12% from yesterday",
+      value: dashboardData?.ordersToday?.toString() || "0",
+      description: `${dashboardData?.ordersGrowth >= 0 ? '+' : ''}${dashboardData?.ordersGrowth || 0}% from yesterday`,
       icon: ShoppingBagIcon,
-      trend: "up",
+      trend: dashboardData?.ordersGrowth >= 0 ? "up" : "down",
     },
     {
       title: "Products in Stock",
-      value: "1,234",
-      description: "8 items low stock",
+      value: dashboardData?.totalProducts?.toString() || "0",
+      description: `${dashboardData?.lowStockProducts || 0} items low stock`,
       icon: PackageIcon,
       trend: "neutral",
     },
     {
-      title: "Revenue Growth",
-      value: "+15.2%",
-      description: "Compared to last quarter",
+      title: "Total Customers",
+      value: dashboardData?.totalCustomers?.toString() || "0",
+      description: "Active customers",
       icon: TrendingUpIcon,
       trend: "up",
     },
@@ -101,20 +149,28 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-card-foreground">Order #{1000 + i}</p>
-                      <p className="text-xs text-muted-foreground">Customer {i}</p>
+                {dashboardData?.recentOrders?.length > 0 ? (
+                  dashboardData.recentOrders.map((order: any) => (
+                    <div key={order.id} className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-card-foreground">{order.orderNumber}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {order.customer ? `${order.customer.firstName} ${order.customer.lastName}` : 'Guest Customer'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-card-foreground">
+                          ${order.total.toFixed(2)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(order.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-card-foreground">
-                        ${(Math.random() * 100 + 20).toFixed(2)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">2 min ago</p>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No recent orders</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -126,19 +182,23 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {["Wireless Headphones", "Smartphone Case", "USB Cable", "Power Bank"].map((product, i) => (
-                  <div key={product} className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-card-foreground">{product}</p>
-                      <p className="text-xs text-muted-foreground">{20 - i * 3} sold</p>
+                {dashboardData?.topProducts?.length > 0 ? (
+                  dashboardData.topProducts.map((product: any) => (
+                    <div key={product.id} className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-card-foreground">{product.name}</p>
+                        <p className="text-xs text-muted-foreground">{product.soldQuantity || 0} sold</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-card-foreground">
+                          ${product.price?.toFixed(2) || '0.00'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-card-foreground">
-                        ${(Math.random() * 50 + 10).toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No sales data available</p>
+                )}
               </div>
             </CardContent>
           </Card>

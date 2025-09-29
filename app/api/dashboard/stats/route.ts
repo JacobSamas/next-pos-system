@@ -11,13 +11,19 @@ export async function GET() {
     const lastMonth = new Date()
     lastMonth.setMonth(lastMonth.getMonth() - 1)
 
+    // Get low stock products first
+    const lowStockProducts = await prisma.$queryRaw<Array<{count: bigint}>>`
+      SELECT COUNT(*) as count FROM Product
+      WHERE isActive = true AND stock <= lowStockThreshold
+    `
+    const lowStockCount = Number(lowStockProducts[0]?.count || 0)
+
     const [
       totalSales,
       lastMonthSales,
       ordersToday,
       ordersYesterday,
       totalProducts,
-      lowStockProducts,
       totalCustomers,
       recentOrders,
       topProducts,
@@ -76,15 +82,6 @@ export async function GET() {
         },
       }),
 
-      // Low stock products
-      prisma.product.count({
-        where: {
-          isActive: true,
-          stock: {
-            lte: prisma.$queryRawUnsafe('stock <= lowStockThreshold'),
-          },
-        },
-      }),
 
       // Total customers
       prisma.customer.count({
@@ -161,7 +158,7 @@ export async function GET() {
       ordersToday,
       ordersGrowth: Number(ordersGrowth.toFixed(1)),
       totalProducts,
-      lowStockProducts,
+      lowStockProducts: lowStockCount,
       totalCustomers,
       recentOrders,
       topProducts: topProductsWithDetails,
