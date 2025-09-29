@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { productsApi, ordersApi } from "@/lib/api"
+import { productsApi, ordersApi, customersApi } from "@/lib/api"
 import { useApi, useMutation } from "@/hooks/use-api"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,8 +10,17 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 const SearchIcon = () => (
   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -22,6 +31,12 @@ const SearchIcon = () => (
 
 const PlusIcon = () => (
   <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+)
+
+const Plus = ({ className }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path d="M12 5v14M5 12h14" />
   </svg>
 )
@@ -91,6 +106,17 @@ export default function BillingPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [paymentMethod, setPaymentMethod] = useState<string>("")
   const [showInvoice, setShowInvoice] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
+  const [showCustomerDialog, setShowCustomerDialog] = useState(false)
+  const [customerForm, setCustomerForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    address: "",
+    city: "",
+    zipCode: ""
+  })
 
   // Fetch products with search
   const { data: productsData, loading: productsLoading, error: productsError } = useApi(
@@ -98,8 +124,36 @@ export default function BillingPage() {
     [searchTerm]
   )
 
+  // Fetch customers for selection
+  const { data: customersData, refetch: refetchCustomers } = useApi(() => customersApi.getAll({ limit: 100 }), [])
+
+  // Create customer mutation
+  const createCustomerMutation = useMutation(customersApi.create, {
+    onSuccess: (newCustomer) => {
+      setSelectedCustomer(newCustomer)
+      setShowCustomerDialog(false)
+      setCustomerForm({ firstName: "", lastName: "", email: "", phone: "", address: "", city: "", zipCode: "" })
+      refetchCustomers()
+    }
+  })
+
   const products = productsData?.products || []
+  const customers = customersData?.customers || []
   const filteredProducts = products
+
+  const handleCreateCustomer = async () => {
+    const customerData = {
+      firstName: customerForm.firstName,
+      lastName: customerForm.lastName,
+      email: customerForm.email || undefined,
+      phone: customerForm.phone || undefined,
+      address: customerForm.address || undefined,
+      city: customerForm.city || undefined,
+      zipCode: customerForm.zipCode || undefined,
+    }
+
+    await createCustomerMutation.mutate(customerData)
+  }
 
   const addToCart = (product: Product) => {
     const existingItem = cart.find((item) => item.id === product.id)
@@ -151,6 +205,7 @@ export default function BillingPage() {
     if (cart.length === 0 || !paymentMethod) return
 
     const orderData = {
+      customerId: selectedCustomer?.id || undefined,
       items: cart.map(item => ({
         productId: item.id,
         quantity: item.quantity,
@@ -235,6 +290,59 @@ export default function BillingPage() {
                 <CardDescription>{cart.length} items</CardDescription>
               </CardHeader>
               <CardContent>
+                {/* Customer Selection */}
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h4 className="font-medium text-sm">Customer:</h4>
+                    {selectedCustomer ? (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">
+                          {selectedCustomer.firstName} {selectedCustomer.lastName}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedCustomer(null)}
+                          className="h-6 px-2 text-xs"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">Guest Customer</span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Select
+                      value={selectedCustomer?.id || ""}
+                      onValueChange={(value) => {
+                        const customer = customers.find(c => c.id === value)
+                        setSelectedCustomer(customer || null)
+                      }}
+                    >
+                      <SelectTrigger className="bg-input border-border">
+                        <SelectValue placeholder="Select existing customer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {customers.map((customer: any) => (
+                          <SelectItem key={customer.id} value={customer.id}>
+                            {customer.firstName} {customer.lastName}
+                            {customer.phone && <span className="text-muted-foreground"> - {customer.phone}</span>}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowCustomerDialog(true)}
+                      className="whitespace-nowrap"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      New
+                    </Button>
+                  </div>
+                </div>
                 <ScrollArea className="h-64 mb-4">
                   {cart.length === 0 ? (
                     <p className="text-center text-muted-foreground py-8">Cart is empty</p>
@@ -378,6 +486,17 @@ export default function BillingPage() {
                 <p className="text-xs text-muted-foreground">{new Date().toLocaleString()}</p>
               </div>
 
+              {selectedCustomer && (
+                <div className="bg-muted p-3 rounded-lg">
+                  <h4 className="font-semibold text-sm mb-1">Bill To:</h4>
+                  <p className="text-sm">{selectedCustomer.firstName} {selectedCustomer.lastName}</p>
+                  {selectedCustomer.email && <p className="text-xs text-muted-foreground">{selectedCustomer.email}</p>}
+                  {selectedCustomer.phone && <p className="text-xs text-muted-foreground">{selectedCustomer.phone}</p>}
+                  {selectedCustomer.address && <p className="text-xs text-muted-foreground">{selectedCustomer.address}</p>}
+                  {selectedCustomer.city && <p className="text-xs text-muted-foreground">{selectedCustomer.city} {selectedCustomer.zipCode}</p>}
+                </div>
+              )}
+
               <Separator />
 
               <div className="space-y-2">
@@ -423,6 +542,99 @@ export default function BillingPage() {
                 New Transaction
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Customer Dialog */}
+        <Dialog open={showCustomerDialog} onOpenChange={setShowCustomerDialog}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Add New Customer</DialogTitle>
+              <DialogDescription>
+                Create a new customer for this order. All fields are optional except name.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name *</Label>
+                  <Input
+                    id="firstName"
+                    value={customerForm.firstName}
+                    onChange={(e) => setCustomerForm({ ...customerForm, firstName: e.target.value })}
+                    className="bg-input border-border"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Input
+                    id="lastName"
+                    value={customerForm.lastName}
+                    onChange={(e) => setCustomerForm({ ...customerForm, lastName: e.target.value })}
+                    className="bg-input border-border"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={customerForm.email}
+                  onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })}
+                  className="bg-input border-border"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  value={customerForm.phone}
+                  onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })}
+                  className="bg-input border-border"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Address</Label>
+                <Textarea
+                  id="address"
+                  value={customerForm.address}
+                  onChange={(e) => setCustomerForm({ ...customerForm, address: e.target.value })}
+                  className="bg-input border-border"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="city">City</Label>
+                  <Input
+                    id="city"
+                    value={customerForm.city}
+                    onChange={(e) => setCustomerForm({ ...customerForm, city: e.target.value })}
+                    className="bg-input border-border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="zipCode">Zip Code</Label>
+                  <Input
+                    id="zipCode"
+                    value={customerForm.zipCode}
+                    onChange={(e) => setCustomerForm({ ...customerForm, zipCode: e.target.value })}
+                    className="bg-input border-border"
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="submit"
+                onClick={handleCreateCustomer}
+                disabled={createCustomerMutation.loading || !customerForm.firstName || !customerForm.lastName}
+              >
+                {createCustomerMutation.loading ? "Creating..." : "Create Customer"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </main>

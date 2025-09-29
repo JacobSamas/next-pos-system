@@ -29,7 +29,11 @@ export async function GET(request: NextRequest) {
           customer: true,
           items: {
             include: {
-              product: true,
+              product: {
+                include: {
+                  category: true,
+                },
+              },
             },
           },
         },
@@ -126,7 +130,11 @@ export async function POST(request: NextRequest) {
           customer: true,
           items: {
             include: {
-              product: true,
+              product: {
+                include: {
+                  category: true,
+                },
+              },
             },
           },
         },
