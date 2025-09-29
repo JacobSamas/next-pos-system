@@ -95,9 +95,15 @@ export default function ProductsPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
+
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: "",
+    description: "",
+  })
 
   const [formData, setFormData] = useState({
     name: "",
@@ -122,7 +128,9 @@ export default function ProductsPage() {
   )
 
   // Fetch categories
-  const { data: categories, loading: categoriesLoading } = useApi(() => categoriesApi.getAll(), [])
+  const { data: categoriesData, loading: categoriesLoading, refetch: refetchCategories } = useApi(() => categoriesApi.getAll({ limit: 100 }), [])
+
+  const categories = categoriesData?.categories || []
 
   // Mutations
   const createProductMutation = useMutation(productsApi.create, {
@@ -150,6 +158,16 @@ export default function ProductsPage() {
       refetchProducts()
       setIsDeleteDialogOpen(false)
       setSelectedProduct(null)
+    }
+  })
+
+  const createCategoryMutation = useMutation(categoriesApi.create, {
+    onSuccess: (newCategory) => {
+      refetchCategories()
+      setIsCategoryDialogOpen(false)
+      setCategoryFormData({ name: "", description: "" })
+      // Auto-select the newly created category
+      setFormData({ ...formData, categoryId: newCategory.id })
     }
   })
 
@@ -227,6 +245,15 @@ export default function ProductsPage() {
     await deleteProductMutation.mutate(selectedProduct.id)
   }
 
+  const handleCreateCategory = async () => {
+    const categoryData = {
+      name: categoryFormData.name,
+      description: categoryFormData.description || undefined,
+    }
+
+    await createCategoryMutation.mutate(categoryData)
+  }
+
   const ProductForm = ({ isEdit = false }: { isEdit?: boolean }) => (
     <div className="grid gap-4 py-4">
       <div className="grid grid-cols-4 items-center gap-4">
@@ -268,18 +295,30 @@ export default function ProductsPage() {
         <Label htmlFor="categoryId" className="text-right">
           Category
         </Label>
-        <Select value={formData.categoryId} onValueChange={(value) => setFormData({ ...formData, categoryId: value })}>
-          <SelectTrigger className="col-span-3 bg-input border-border">
-            <SelectValue placeholder="Select category" />
-          </SelectTrigger>
-          <SelectContent>
-            {categories?.map((category: Category) => (
-              <SelectItem key={category.id} value={category.id}>
-                {category.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="col-span-3 flex gap-2">
+          <Select value={formData.categoryId} onValueChange={(value) => setFormData({ ...formData, categoryId: value })}>
+            <SelectTrigger className="bg-input border-border">
+              <SelectValue placeholder="Select category" />
+            </SelectTrigger>
+            <SelectContent>
+              {categories?.map((category: Category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsCategoryDialogOpen(true)}
+            className="whitespace-nowrap"
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            New
+          </Button>
+        </div>
       </div>
       <div className="grid grid-cols-4 items-center gap-4">
         <Label htmlFor="stock" className="text-right">
@@ -584,6 +623,54 @@ export default function ProductsPage() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Create Category Dialog */}
+          <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Create New Category</DialogTitle>
+                <DialogDescription>
+                  Add a new product category. This will help organize your inventory.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="categoryName" className="text-right">
+                    Name
+                  </Label>
+                  <Input
+                    id="categoryName"
+                    value={categoryFormData.name}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
+                    className="col-span-3 bg-input border-border"
+                    placeholder="e.g., Electronics, Clothing"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="categoryDescription" className="text-right">
+                    Description
+                  </Label>
+                  <Textarea
+                    id="categoryDescription"
+                    value={categoryFormData.description}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
+                    className="col-span-3 bg-input border-border"
+                    placeholder="Optional description"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="submit"
+                  onClick={handleCreateCategory}
+                  disabled={createCategoryMutation.loading || !categoryFormData.name}
+                >
+                  {createCategoryMutation.loading ? "Creating..." : "Create Category"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </main>
       </div>
     </div>

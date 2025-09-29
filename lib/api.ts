@@ -77,12 +77,45 @@ export const productsApi = {
 
 // Categories API
 export const categoriesApi = {
-  getAll: () => fetchApi<any[]>('/categories'),
+  getAll: (params?: {
+    page?: number
+    limit?: number
+    search?: string
+  }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.page) searchParams.set('page', params.page.toString())
+    if (params?.limit) searchParams.set('limit', params.limit.toString())
+    if (params?.search) searchParams.set('search', params.search)
+
+    const query = searchParams.toString()
+    return fetchApi<{
+      categories: any[]
+      pagination?: {
+        page: number
+        limit: number
+        total: number
+        pages: number
+      }
+    }>(`/categories${query ? `?${query}` : ''}`)
+  },
+
+  getById: (id: string) => fetchApi<any>(`/categories/${id}`),
 
   create: (data: { name: string; description?: string }) =>
     fetchApi<any>('/categories', {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: { name: string; description?: string }) =>
+    fetchApi<any>(`/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) =>
+    fetchApi<any>(`/categories/${id}`, {
+      method: 'DELETE',
     }),
 }
 
