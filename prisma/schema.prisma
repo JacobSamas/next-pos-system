@@ -118,16 +118,46 @@ model TaxRate {
 }
 
 model StoreSettings {
-  id            String   @id @default(cuid())
-  storeName     String
-  storeAddress  String?
-  storePhone    String?
-  storeEmail    String?
-  currency      String   @default("USD")
-  taxRate       Float    @default(0)
-  receiptFooter String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  storeName            String
+  storeAddress         String?
+  storePhone           String?
+  storeEmail           String?
+  currency             String   @default("USD")
+  taxRate              Float    @default(0)
+
+  // User Settings
+  userName             String?
+  userEmail            String?
+  userRole             String   @default("admin")
+
+  // Notifications
+  emailNotifications   Boolean  @default(true)
+  lowStockAlerts       Boolean  @default(true)
+  dailyReports         Boolean  @default(false)
+  customerUpdates      Boolean  @default(true)
+
+  // Payment Settings
+  acceptCash           Boolean  @default(true)
+  acceptCard           Boolean  @default(true)
+  acceptUPI            Boolean  @default(true)
+  cardProcessorFee     Float    @default(2.9)
+
+  // Receipt Settings
+  receiptHeader        String?
+  receiptFooter        String?
+  printReceipts        Boolean  @default(true)
+  emailReceipts        Boolean  @default(false)
+
+  // System Settings
+  autoBackup           Boolean  @default(true)
+  backupFrequency      String   @default("daily")
+  theme                String   @default("dark")
+  language             String   @default("en")
+  timezone             String   @default("America/New_York")
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }
 
 enum OrderStatus {

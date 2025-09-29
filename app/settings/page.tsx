@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { settingsApi } from "@/lib/api"
+import { useApi, useMutation } from "@/hooks/use-api"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -119,15 +121,56 @@ export default function SettingsPage() {
     timezone: "America/New_York",
   })
 
-  const [isSaving, setIsSaving] = useState(false)
+  // Fetch settings from API
+  const { data: settingsData, loading: settingsLoading, refetch: refetchSettings } = useApi(
+    () => settingsApi.get(),
+    []
+  )
+
+  // Update settings mutation
+  const updateSettingsMutation = useMutation(settingsApi.update, {
+    onSuccess: () => {
+      refetchSettings()
+      console.log("Settings saved successfully!")
+    }
+  })
+
+  // Update local state when API data loads
+  useEffect(() => {
+    if (settingsData) {
+      setSettings({
+        storeName: settingsData.storeName || "RetailPro",
+        storeAddress: settingsData.storeAddress || "",
+        storePhone: settingsData.storePhone || "",
+        storeEmail: settingsData.storeEmail || "",
+        taxRate: settingsData.taxRate?.toString() || "10",
+        currency: settingsData.currency || "USD",
+        userName: settingsData.userName || "John Doe",
+        userEmail: settingsData.userEmail || "",
+        userRole: settingsData.userRole || "admin",
+        emailNotifications: settingsData.emailNotifications ?? true,
+        lowStockAlerts: settingsData.lowStockAlerts ?? true,
+        dailyReports: settingsData.dailyReports ?? false,
+        customerUpdates: settingsData.customerUpdates ?? true,
+        acceptCash: settingsData.acceptCash ?? true,
+        acceptCard: settingsData.acceptCard ?? true,
+        acceptUPI: settingsData.acceptUPI ?? true,
+        cardProcessorFee: settingsData.cardProcessorFee?.toString() || "2.9",
+        receiptHeader: settingsData.receiptHeader || "",
+        receiptFooter: settingsData.receiptFooter || "",
+        printReceipts: settingsData.printReceipts ?? true,
+        emailReceipts: settingsData.emailReceipts ?? false,
+        autoBackup: settingsData.autoBackup ?? true,
+        backupFrequency: settingsData.backupFrequency || "daily",
+        theme: settingsData.theme || "dark",
+        language: settingsData.language || "en",
+        timezone: settingsData.timezone || "America/New_York",
+      })
+    }
+  }, [settingsData])
 
   const handleSave = async () => {
-    setIsSaving(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsSaving(false)
-    // Show success message (in a real app, you'd use a toast)
-    console.log("Settings saved successfully!")
+    await updateSettingsMutation.mutate(settings)
   }
 
   const updateSetting = (key: string, value: any) => {
@@ -609,9 +652,9 @@ export default function SettingsPage() {
 
           {/* Save Button */}
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2">
+            <Button onClick={handleSave} disabled={updateSettingsMutation.loading} className="flex items-center gap-2">
               <Save className="h-4 w-4" />
-              {isSaving ? "Saving..." : "Save Settings"}
+              {updateSettingsMutation.loading ? "Saving..." : "Save Settings"}
             </Button>
           </div>
         </main>

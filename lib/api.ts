@@ -219,4 +219,15 @@ export const dashboardApi = {
   }>('/dashboard/stats'),
 }
 
+// Settings API
+export const settingsApi = {
+  get: () => fetchApi<any>('/settings'),
+
+  update: (data: any) =>
+    fetchApi<any>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+}
+
 export { ApiError }
